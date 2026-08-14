@@ -243,6 +243,15 @@ body.pwa-banner-visible nav{top:56px;transition:top 0.5s cubic-bezier(0.34,1.56,
 .dark-mode #signInModal input{background:#2c2c2e;border-color:#3a3a3c;color:#e0e0e0;}
 .dark-mode #signInModal input::placeholder{color:#666;}
 #signInModal input:focus{border-color:var(--accent-green);outline:none;box-shadow:0 0 0 3px rgba(16,185,129,0.1);}
+/* Keep the sign-in modal above the listing modal */
+#signInModal {
+  z-index: 99999 !important;
+}
+
+#signInModal .modal-content {
+  position: relative;
+  z-index: 100000 !important;
+}
 
 footer{background:#111111;color:white;padding:5rem 5% 2rem;text-align:center;transition:background 0.3s ease;}
 .dark-mode footer{background:#0a0a0a;}
@@ -1780,9 +1789,9 @@ footer{background:#111111;color:white;padding:5rem 5% 2rem;text-align:center;tra
             <i class="fa-solid fa-arrow-left"></i> Back
           </button>
         </div>
-        <button class="lr-pay-btn" onclick="submitLRListing()">
-            <i class="fa-solid fa-credit-card"></i> Pay R150 &amp; Post Listing
-        </button>
+        <button onclick="submitLRListing()">
+  List Property
+</button>
       </div>
 
     </div>
@@ -3523,7 +3532,45 @@ window.lrPreviewImages = function(e) {
     preview.innerHTML += `<img src="${url}" class="lr-preview-img" alt="preview">`;
   });
 };
+
+let continueListingAfterLogin = false;
+
+onAuthStateChanged(auth, (user) => {
+
+  if (user && continueListingAfterLogin) {
+
+    continueListingAfterLogin = false;
+
+    const signInModal = document.getElementById("signInModal");
+
+    if (signInModal) {
+      signInModal.style.display = "none";
+    }
+
+    // Continue the listing process automatically
+    submitLRListing();
+  }
+});
+
 window.submitLRListing = async function () {
+
+  const user = auth.currentUser;
+
+  if (!user) {
+
+    // Remember that the user was trying to list a property
+    continueListingAfterLogin = true;
+
+    // Bring sign-in modal to the front
+    const signInModal = document.getElementById("signInModal");
+
+    if (signInModal) {
+      signInModal.style.display = "flex";
+      signInModal.style.zIndex = "99999";
+    }
+
+    return;
+  }
 
   const map = {
     lrOwnerName: 'addOwnerName',
@@ -3534,6 +3581,7 @@ window.submitLRListing = async function () {
     lrAmenities: 'addAmenities',
     lrDesc: 'addDesc'
   };
+
 
   let valid = true;
 
@@ -3605,17 +3653,26 @@ window.submitLRListing = async function () {
   // =========================
   // 8. STORE IN FIREBASE (SESSION)
   // =========================
-  try {
-    await db.collection("paymentSessions").doc(paymentId).set({
-      listing,
-      status: "pending",
-      createdAt: new Date()
-    });
-  } catch (err) {
-    console.error("Firebase error:", err);
-    alert("Could not create payment session. Try again.");
-    return;
-  }
+try {
+  const paymentSessionRef = ref(
+    db,
+    `paymentSessions/${paymentId}`
+  );
+
+  await set(paymentSessionRef, {
+    userId: user.uid,
+    listing: listing,
+    status: "pending",
+    createdAt: Date.now()
+  });
+
+  console.log("Payment session created:", paymentId);
+
+} catch (err) {
+  console.error("Firebase error:", err);
+  alert("Could not create payment session. Try again.");
+  return;
+}
 
   // =========================
   // 9. REDIRECT TO PAYMENT
